@@ -25,6 +25,14 @@ tag.define {
 }
 
 tag.define {
+  name = "season",
+  transform = function(o)
+    o.pageDecoration = { prefix = "🗓️ " }
+    return o
+  end
+}
+
+tag.define {
   name = "circuit",
   transform = function(o)
     o.pageDecoration = { prefix = "🛣️ " }

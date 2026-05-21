@@ -8,4 +8,4 @@ previousTeams:
 championships: 0
 ---
 
-Albon raced for [[Teams/Red Bull Racing]] in 2019–2020 as [[Drivers/Max Verstappen]]'s teammate. Dropped after 2020, he returned with [[Teams/Williams]] in 2022 and has anchored the team's rebuild under [[People/James Vowles]].
+Albon raced for [[Teams/Red Bull Racing]] in 2019–2020 as the new team mate of [[Drivers/Max Verstappen]]. Dropped after 2020, he returned with [[Teams/Williams]] in 2022 and has anchored the team's rebuild under [[People/James Vowles]].
