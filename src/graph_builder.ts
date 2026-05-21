@@ -26,11 +26,11 @@ const CORE_TAGS = new Set([
 	"aspiring-page",
 ]);
 
-function isCoreTag(t: string): boolean {
+export function isCoreTag(t: string): boolean {
 	return CORE_TAGS.has(t) || t.startsWith("meta/");
 }
 
-type RelationRow = {
+export type RelationRow = {
 	from: string;
 	to: string;
 	fromTag?: string;
@@ -57,7 +57,7 @@ type IndexedObject = {
  * link to `Page@744` (or `Page#header`, `Page$anchor`) lands on the bare
  * `Page` node. URL / file refs are untouched.
  */
-function stripPagePos(ref: string): string {
+export function stripPagePos(ref: string): string {
 	if (classifyKind(ref) !== "page") return ref;
 	return ref.split(/[@#$]/)[0] || ref;
 }
@@ -99,7 +99,7 @@ async function ensureCache(): Promise<GraphCache> {
  * Match an edge endpoint against a bare ref, including positional /
  * header / anchor variants (`Page@123`, `Page#header`, `Page$anchor`).
  */
-function endpointMatchesRef(endpoint: string, ref: string): boolean {
+export function endpointMatchesRef(endpoint: string, ref: string): boolean {
 	if (endpoint === ref) return true;
 	if (!endpoint.startsWith(ref)) return false;
 	const c = endpoint.charAt(ref.length);
@@ -118,7 +118,7 @@ async function queryRelations(ref: string): Promise<RelationRow[]> {
  * into a single undirected edge. Other parallel edges (different `type` or
  * different `kind`) remain distinct.
  */
-function collapseEdges(rows: RelationRow[]): Edge[] {
+export function collapseEdges(rows: RelationRow[]): Edge[] {
 	const out: Edge[] = [];
 	const seenCoMention = new Map<string, number>(); // key -> out index
 
@@ -193,7 +193,7 @@ async function findIndexed(
 	return null;
 }
 
-function classifyKind(ref: string): ObjectKind {
+export function classifyKind(ref: string): ObjectKind {
 	if (/^https?:\/\//.test(ref)) return "url";
 	if (/^[^/]+\.[^/]+$/.test(ref) && !ref.endsWith(".md")) return "file";
 	return "page";
@@ -209,7 +209,7 @@ function deriveTitle(
 	return ref;
 }
 
-function deriveTagFields(
+export function deriveTagFields(
 	allTags: string[],
 	hostTag: string,
 ): {

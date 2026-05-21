@@ -17,11 +17,10 @@ import type {
 import { GraphCanvas } from "./graph_canvas.tsx";
 import { Header } from "./header.tsx";
 import { Sidebar } from "./sidebar.tsx";
+import { computeVisible, type NodeState } from "./visibility.ts";
 
 const FILTERS_KEY = ["plug", "object-graph", "filters"];
 const FORCES_KEY = ["plug", "object-graph", "forces"];
-
-type NodeState = { node: ObjectNode; status: "expanded" | "ghost" };
 
 function edgeKey(e: Edge): string {
 	return `${e.source} ${e.target} ${e.label} ${e.kind}`;
@@ -255,60 +254,10 @@ export function App({ vm }: { vm: RootViewModel }) {
 	//     hidden — otherwise unchecking an edge label leaves orphan ghosts
 	//     floating with no visible reason to be there.
 	const rootRef = vm.root.object.ref;
-	const { visibleNodes, visibleEdges } = useMemo(() => {
-		function passesTags(n: ObjectNode): boolean {
-			if (n.ref === rootRef) return true;
-			if (n.tags.length === 0) {
-				return !filters.hiddenTags.includes("(untagged)");
-			}
-			return n.tags.some((t) => !filters.hiddenTags.includes(t));
-		}
-
-		// Stage 1 — candidate set: tag filter applies uniformly (root excepted).
-		const candidate = new Set<string>();
-		for (const ns of nodes.values()) {
-			if (passesTags(ns.node)) candidate.add(ns.node.ref);
-		}
-
-		// Stage 2 — edges that survive label filter AND connect candidates.
-		const labeledEdges = edges.filter(
-			(e) =>
-				candidate.has(e.source) &&
-				candidate.has(e.target) &&
-				!filters.hiddenLabels.includes(e.label),
-		);
-
-		// Stage 3 — degree-by-visible-edge; ghosts need at least one connection.
-		const degree = new Map<string, number>();
-		for (const e of labeledEdges) {
-			degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
-			degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
-		}
-
-		const out: NodeState[] = [];
-		const hideOrphans = filters.hideOrphans;
-		for (const ns of nodes.values()) {
-			if (!candidate.has(ns.node.ref)) continue;
-			// With "Hide orphans" on (the default), nodes with no visible
-			// incoming or outgoing relation are hidden — except the root,
-			// which is the user's anchor. With it off, every candidate
-			// stays visible regardless of connectivity.
-			if (
-				!hideOrphans ||
-				ns.node.ref === rootRef ||
-				(degree.get(ns.node.ref) ?? 0) > 0
-			) {
-				out.push(ns);
-			}
-		}
-
-		const visibleRefSet = new Set(out.map((ns) => ns.node.ref));
-		const edgesOut = labeledEdges.filter(
-			(e) => visibleRefSet.has(e.source) && visibleRefSet.has(e.target),
-		);
-
-		return { visibleNodes: out, visibleEdges: edgesOut };
-	}, [nodes, edges, filters, rootRef]);
+	const { visibleNodes, visibleEdges } = useMemo(
+		() => computeVisible(nodes.values(), edges, filters, rootRef),
+		[nodes, edges, filters, rootRef],
+	);
 
 	// Keep the ref in sync so expandAllVisibleGhosts sees the latest set.
 	visibleNodesRef.current = visibleNodes;
