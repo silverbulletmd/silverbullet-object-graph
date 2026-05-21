@@ -1,0 +1,521 @@
+// Visual language aligned with SilverBullet's configuration-manager plug
+// — color tokens, section header style, button style, and border radii
+// match `silverbullet/plugs/configuration-manager/ui/configuration.scss`.
+// Dark mode is driven by both `prefers-color-scheme` (for iframes that
+// don't see the parent's data-theme) AND `html[data-theme="dark"]` (for
+// when SilverBullet propagates its explicit theme into the iframe).
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  font-size: 14px;
+
+  // Tokens copied verbatim from configuration-manager's :root.
+  --cfg-bg: #fff;
+  --cfg-color: #333;
+  --cfg-color-muted: #777;
+  --cfg-border: #ddd;
+  --cfg-input-bg: #fff;
+  --cfg-input-border: #ccc;
+  --cfg-input-focus-border: #464cfc;
+  --cfg-accent: #464cfc;
+  --cfg-accent-text: #fff;
+  --cfg-section-bg: #f5f5f5;
+  --cfg-hover: #f0f0f0;
+
+  // Graph palette — node-color tokens are object-graph specific.
+  --gv-node: #111;
+  --gv-node-current: #1e63d8;
+  --gv-node-dim: #9e4705;       // missing-link rust
+  --gv-label: #333;
+  --gv-label-dim: #777;
+  --gv-link: #c8c8c8;
+  --gv-link-dim: #e6e6e6;
+  --gv-link-hot: #464cfc;
+  --gv-accent: #650007;         // SB meta-color — current-page ring
+  --gv-label-halo: rgba(255, 255, 255, 0.78);
+
+  --gv-tag-bg: #4070d0;
+  --gv-tag-fg: #ffffff;
+  --gv-tag-border: #2a5099;
+
+  --gv-untagged: #9e9e9e;
+}
+
+// Dark tokens — same values configuration-manager uses, applied for either
+// the explicit theme attribute or the user's system preference.
+@mixin gv-dark-tokens {
+  color-scheme: dark;
+
+  --cfg-bg: #1e1e1e;
+  --cfg-color: #ccc;
+  --cfg-color-muted: #888;
+  --cfg-border: #444;
+  --cfg-input-bg: #2a2a2a;
+  --cfg-input-border: #555;
+  --cfg-input-focus-border: #6e74ff;
+  --cfg-accent: #6e74ff;
+  --cfg-accent-text: #fff;
+  --cfg-section-bg: #262626;
+  --cfg-hover: #333;
+
+  --gv-node: #fff;
+  --gv-node-current: #6e9bff;
+  --gv-node-dim: #c97c4a;
+  --gv-label: #d8d8d8;
+  --gv-label-dim: #888;
+  --gv-link: #555;
+  --gv-link-dim: #333;
+  --gv-link-hot: #6e74ff;
+  --gv-accent: #d6222e;
+  --gv-label-halo: rgba(30, 30, 30, 0.78);
+
+  --gv-tag-bg: #5b85e8;
+  --gv-tag-fg: #ffffff;
+  --gv-tag-border: #3868c8;
+
+  --gv-untagged: #6e6e6e;
+}
+
+html[data-theme="dark"] { @include gv-dark-tokens; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) { @include gv-dark-tokens; }
+}
+
+html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
+
+#graph-root {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--cfg-bg);
+  color: var(--cfg-color);
+  border: 1px solid var(--cfg-border);
+  border-radius: 6px;
+  overflow: hidden;
+  outline: none;
+}
+
+.graph-root-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+.graph-app {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.graph-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+// Floating controls overlay (bottom-right of the canvas stage).
+// Pan pad on the left, zoom in/out stacked on the right.
+.graph-controls {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+  z-index: 2;
+  pointer-events: none; // children opt in
+
+  button {
+    pointer-events: auto;
+    background: var(--cfg-bg);
+    color: var(--cfg-color);
+    border: 1px solid var(--cfg-border);
+    border-radius: 6px;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+
+    &:hover { background: var(--cfg-hover); }
+    &:active { background: var(--cfg-section-bg); }
+  }
+}
+
+.graph-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  button {
+    flex: 1 1 0;
+    height: auto;  // let flex stretch determine the height
+  }
+}
+
+// 3x3 directional pad — middle row has ←, center, →; top/bottom rows
+// have just the up/down arrow in the middle column.
+.graph-pan {
+  display: grid;
+  grid-template-columns: repeat(3, 28px);
+  grid-template-rows: repeat(3, 28px);
+  gap: 4px;
+
+  .graph-pan-up    { grid-column: 2; grid-row: 1; }
+  .graph-pan-left  { grid-column: 1; grid-row: 2; }
+  .graph-pan-center{ grid-column: 2; grid-row: 2; }
+  .graph-pan-right { grid-column: 3; grid-row: 2; }
+  .graph-pan-down  { grid-column: 2; grid-row: 3; }
+}
+
+.gv-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--cfg-bg);
+  color: var(--cfg-color);
+}
+.gv-body {
+  display: grid;
+  grid-template-columns: var(--gv-sidebar-width, 230px) 5px minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.gv-resizer {
+  cursor: col-resize;
+  background: transparent;
+  border-left: 1px solid var(--cfg-border);
+  user-select: none;
+  transition: background 120ms ease;
+}
+.gv-resizer:hover,
+.gv-resizer.dragging {
+  background: var(--cfg-accent, rgba(70, 76, 252, 0.25));
+}
+.gv-canvas-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.gv-canvas-wrap .graph-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* Object section inside the sidebar (selected node attributes). */
+.gv-object-section {
+  margin-top: auto;
+  padding: 6px 14px 10px;
+  border-top: 1px solid var(--cfg-border);
+  background: var(--cfg-bg);
+}
+.gv-object-section .gv-object-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--cfg-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cfg-color);
+}
+.gv-object-section .gv-object-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-object-section .gv-object-title-link {
+  cursor: pointer;
+  color: var(--cfg-accent);
+  text-decoration: none;
+}
+.gv-object-section .gv-object-title-link:hover { text-decoration: underline; }
+.gv-object-section .gv-object-body {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--cfg-color);
+}
+
+/* Header — sized roughly like configuration-manager's #cfg-header. */
+.gv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--cfg-border);
+  flex-shrink: 0;
+}
+.gv-header-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+// Toolbar buttons follow `.cfg-btn` from configuration-manager (sized
+// down a touch since the header is denser than a full settings page).
+.gv-header-button {
+  padding: 5px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--cfg-border);
+  background: var(--cfg-bg);
+  color: var(--cfg-color);
+  cursor: pointer;
+  font-size: 13px;
+}
+.gv-header-button:hover:not(:disabled) { background: var(--cfg-hover); }
+.gv-header-button:disabled { cursor: default; opacity: 0.6; }
+
+.gv-header-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--cfg-color);
+  user-select: none;
+  cursor: pointer;
+}
+.gv-header-toggle input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--cfg-accent);
+  cursor: pointer;
+}
+
+// Close button — matches #cfg-close (background-less, just an icon).
+.gv-close-button {
+  background: none;
+  border: none;
+  color: var(--cfg-color-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 18px;
+  line-height: 1;
+  margin-left: auto;
+}
+.gv-close-button:hover {
+  background: var(--cfg-hover);
+  color: var(--cfg-color);
+}
+
+.gv-remove-button {
+  background: none;
+  border: 1px solid var(--cfg-border);
+  border-radius: 4px;
+  color: var(--cfg-color-muted);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.gv-remove-button:hover {
+  background: var(--cfg-hover);
+  color: var(--cfg-color);
+}
+
+/* Edge hover tooltip */
+.gv-edge-tooltip {
+  position: absolute;
+  z-index: 20;
+  max-width: 360px;
+  background: var(--cfg-bg);
+  border: 1px solid var(--cfg-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  padding: 6px 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  color: var(--cfg-color);
+  pointer-events: none;
+  line-height: 1.4;
+}
+.gv-edge-tooltip-label {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.gv-edge-tooltip-snippet {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: var(--cfg-color);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 8em;
+  overflow: hidden;
+}
+.gv-edge-tooltip-empty {
+  color: var(--cfg-color-muted);
+  font-style: italic;
+}
+
+/* Sidebar */
+.gv-sidebar {
+  border-right: 1px solid var(--cfg-border);
+  overflow: auto;
+  font-size: 13px;
+}
+// Filter sections — title underline matches configuration-manager's
+// .lib-section-header / .cfg-category-title pattern.
+.gv-section { padding: 12px 14px 6px; }
+.gv-section + .gv-section { padding-top: 14px; }
+.gv-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--cfg-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cfg-color-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.gv-section-title { display: inline-flex; align-items: center; }
+.gv-twisty {
+  display: inline-block;
+  transition: transform 0.12s;
+  margin-right: 6px;
+  font-size: 10px;
+  color: var(--cfg-color-muted);
+}
+.gv-twisty.open { transform: rotate(90deg); }
+.gv-section-actions {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+.gv-section-actions a {
+  cursor: pointer;
+  color: var(--cfg-color-muted);
+  text-decoration: none;
+}
+.gv-section-actions a:hover { color: var(--cfg-color); text-decoration: underline; }
+.gv-section-body { padding: 0; }
+.gv-section-search {
+  width: 100%;
+  border: 1px solid var(--cfg-input-border);
+  background: var(--cfg-input-bg);
+  color: var(--cfg-color);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+  margin: 4px 0 8px;
+}
+.gv-section-search:focus {
+  outline: none;
+  border-color: var(--cfg-input-focus-border);
+}
+.gv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.gv-row input[type="checkbox"] {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--cfg-accent);
+  cursor: pointer;
+}
+.gv-count { margin-left: auto; color: var(--cfg-color-muted); font-size: 12px; }
+.gv-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.gv-tag-row { display: inline-flex; align-items: center; gap: 6px; }
+.gv-more {
+  display: block;
+  margin-top: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--cfg-accent);
+}
+.gv-more:hover { text-decoration: underline; }
+
+/* Object view */
+.gv-object-view {
+  border-left: 1px solid var(--cfg-border);
+  background: var(--cfg-bg);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.gv-object-view-empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--cfg-color-muted);
+  font-size: 12px;
+  padding: 18px;
+}
+.gv-object-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cfg-border);
+}
+.gv-object-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.gv-object-body {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--cfg-color);
+}
+
+/* Empty graph overlay */
+.gv-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cfg-color-muted);
+  font-size: 13px;
+}

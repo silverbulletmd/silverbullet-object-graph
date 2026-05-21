@@ -1,0 +1,23 @@
+{
+  "name": "silverbullet-object-graph",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "plug-compile object-graph.plug.yaml",
+    "build:deploy": "npm run build && mkdir -p demo-space/Library/zefhemel/silverbullet-object-graph && cp object-graph.plug.js ObjectGraph.md demo-space/Library/zefhemel/silverbullet-object-graph/",
+    "lint": "biome check src ui",
+    "lint:fix": "biome check --write src ui",
+    "format": "biome format --write src ui"
+  },
+  "dependencies": {
+    "@silverbulletmd/silverbullet": ">=2.8.0",
+    "d3-force": "^3.0.0",
+    "force-graph": "^1.49.0",
+    "preact": "^10.22.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@types/d3-force": "^3.0.10"
+  }
+}

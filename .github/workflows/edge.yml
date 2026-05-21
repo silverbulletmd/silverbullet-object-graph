@@ -1,0 +1,51 @@
+name: Edge release
+
+# Builds the plug on every push to main and force-publishes the artifacts
+# to a rolling pre-release tagged "edge". Always reflects the latest
+# commit on main, so users can pin to "edge" for bleeding-edge installs.
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: edge-release
+  cancel-in-progress: true
+
+jobs:
+  edge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build plug
+        run: npm run build
+
+      - name: Replace edge release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Delete any previous "edge" release + tag so we can recreate
+          # them pointing at the latest commit. The "|| true" guards make
+          # the workflow idempotent on the very first run.
+          gh release delete edge --cleanup-tag --yes || true
+
+          gh release create edge \
+            --prerelease \
+            --title "Edge build (rolling)" \
+            --notes "Built from \`${{ github.sha }}\` on $(date -u +%Y-%m-%dT%H:%M:%SZ). This release is replaced on every push to main." \
+            object-graph.plug.js \
+            ObjectGraph.md
