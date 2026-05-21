@@ -8,12 +8,15 @@ import {
 import { buildGraphHtml } from "./graph_html.ts";
 import {
 	defaultFilters,
+	defaultForceSettings,
 	type ExpansionResult,
 	type Filters,
+	type ForceSettings,
 	type RootViewModel,
 } from "./model.ts";
 
 const FILTERS_KEY = ["object-graph", "filters"];
+const FORCES_KEY = ["object-graph", "forces"];
 
 async function loadFilters(): Promise<Filters> {
 	const raw = (await datastore.get(FILTERS_KEY)) as
@@ -21,6 +24,14 @@ async function loadFilters(): Promise<Filters> {
 		| undefined;
 	if (!raw) return defaultFilters;
 	return { ...defaultFilters, ...raw } as Filters;
+}
+
+async function loadForces(): Promise<ForceSettings> {
+	const raw = (await datastore.get(FORCES_KEY)) as
+		| Partial<ForceSettings>
+		| undefined;
+	if (!raw) return defaultForceSettings;
+	return { ...defaultForceSettings, ...raw } as ForceSettings;
 }
 
 export async function showGraph() {
@@ -32,12 +43,13 @@ export async function showGraph() {
 	// Each top-level open of the modal gets fresh data. Subsequent
 	// `expandObject` round-trips from the panel reuse the populated cache.
 	invalidateGraphCache();
-	const [root, universe, filters] = await Promise.all([
+	const [root, universe, filters, forces] = await Promise.all([
 		expandObjectImpl(currentPage),
 		buildUniverse(),
 		loadFilters(),
+		loadForces(),
 	]);
-	const view: RootViewModel = { root, universe, filters };
+	const view: RootViewModel = { root, universe, filters, forces };
 	const { html, script } = await buildGraphHtml(view);
 	await editor.showPanel("modal", 100, html, script);
 }
@@ -75,8 +87,9 @@ export async function showGlobalGraph() {
 		filters: {
 			hiddenTags: [],
 			hiddenLabels,
-			hideEdgeLabels: false,
+			hideEdgeLabels: true,
 		},
+		forces: await loadForces(),
 		initialAllExpanded: true,
 		persistFilters: false,
 	};

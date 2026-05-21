@@ -2,16 +2,20 @@ import { editor } from "@silverbulletmd/silverbullet/syscalls";
 import * as d3 from "d3-force";
 import ForceGraph from "force-graph";
 import { Component } from "preact";
-import type { Edge, ObjectNode, RelationKind } from "../../src/model.ts";
+import type {
+	Edge,
+	ForceSettings,
+	ObjectNode,
+	RelationKind,
+} from "../../src/model.ts";
 import { colorForTag } from "../colors.ts";
 
-// Hand-tuned defaults — empirically produce tight clusters without
-// disconnected components flying apart.
-const CENTER_STRENGTH = 0.15;
-const CHARGE_STRENGTH = -120;
-const LINK_STRENGTH = 1;
-const LINK_DISTANCE = 90;
+// All four force parameters are now driven by sliders in the sidebar;
+// see ForceSettings in src/model.ts for the defaults.
 const CLICK_DELAY_MS = 220;
+// Upper bound for the auto-fit camera scale. Prevents zoomToFit from
+// magnifying a single isolated node to fill the entire canvas.
+const MAX_AUTO_ZOOM = 4;
 
 type NodeStatus = "expanded" | "ghost";
 
@@ -21,6 +25,7 @@ type Props = {
 	selectedRef: string | null;
 	onNodeClick: (ref: string) => void;
 	hideEdgeLabels: boolean;
+	forces: ForceSettings;
 };
 
 type FGNode = {
@@ -64,6 +69,7 @@ type Theme = {
 
 type State = {
 	edgeHover: { edge: MergedEdge; x: number; y: number } | null;
+	ghostHover: { title: string; x: number; y: number } | null;
 };
 
 type ComputedGraph = {
@@ -171,11 +177,16 @@ function computeGraph(
 	});
 	const rmap = new Map<string, number>();
 	for (const n of fgNodes) rmap.set(n.id, nodeRadius(n.degree));
-	return { nodes: fgNodes, links: fgLinks, adjacency: adj, radii: rmap };
+	return {
+		nodes: fgNodes,
+		links: fgLinks,
+		adjacency: adj,
+		radii: rmap,
+	};
 }
 
 export class GraphCanvas extends Component<Props, State> {
-	state: State = { edgeHover: null };
+	state: State = { edgeHover: null, ghostHover: null };
 
 	// DOM + force-graph handles.
 	private containerRef: HTMLDivElement | null = null;
@@ -279,6 +290,37 @@ export class GraphCanvas extends Component<Props, State> {
 		e.preventDefault();
 	}
 
+	// Configure the link force's strength + distance accessors. The link
+	// set itself is owned by force-graph (rebound from graphData on every
+	// update), so we only set the per-link knobs. Multi-edge pairs get a
+	// proportionally stronger spring for Obsidian-style cluster pull.
+	private configureLinkForce() {
+		const fg = this.fg;
+		if (!fg) return;
+		const f = this.props.forces;
+		const linkForce = fg.d3Force("link") as d3.ForceLink<FGNode, FGLink> | null;
+		if (!linkForce) return;
+		const mult = (l: FGLink) => Math.min(l.edge.refs.length, 6);
+		linkForce.strength((l: FGLink) => f.linkStrength * mult(l));
+		linkForce.distance(f.linkDistance);
+	}
+
+	private applyForces() {
+		const fg = this.fg;
+		if (!fg) return;
+		const f = this.props.forces;
+		const centerStrength = (n: FGNode) =>
+			n.degree === 0 ? f.centerStrength * 6 : f.centerStrength;
+		(fg.d3Force("x") as d3.ForceX<FGNode> | null)?.strength(centerStrength);
+		(fg.d3Force("y") as d3.ForceY<FGNode> | null)?.strength(centerStrength);
+		(fg.d3Force("charge") as d3.ForceManyBody<FGNode> | null)?.strength(
+			f.chargeStrength,
+		);
+		this.configureLinkForce();
+		// Re-heat softly so the new force field has a chance to settle.
+		fg.d3ReheatSimulation();
+	}
+
 	componentDidMount() {
 		if (!this.containerRef) return;
 		const fg = ForceGraph()(this.containerRef);
@@ -309,6 +351,17 @@ export class GraphCanvas extends Component<Props, State> {
 				const id = node?.id ?? null;
 				this.hoveredId = id;
 				this.neighbors = id ? (this.adjacency.get(id) ?? new Set()) : new Set();
+				if (node && node.status === "ghost") {
+					this.setState({
+						ghostHover: {
+							title: node.title,
+							x: this.mousePos.x,
+							y: this.mousePos.y,
+						},
+					});
+				} else if (this.state.ghostHover) {
+					this.setState({ ghostHover: null });
+				}
 				this.rerender();
 			})
 			.onNodeClick((node: FGNode) => this.handleNodeClick(node))
@@ -336,9 +389,14 @@ export class GraphCanvas extends Component<Props, State> {
 				node.fy = node.y;
 			});
 
-		// Pull disconnected components toward the center so they don't fly off.
-		fg.d3Force("x", d3.forceX(0).strength(CENTER_STRENGTH));
-		fg.d3Force("y", d3.forceY(0).strength(CENTER_STRENGTH));
+		const f = this.props.forces;
+		// Center pull, degree-aware: isolated nodes (degree 0) get a much
+		// stronger pull so they don't drift off into the void; well-connected
+		// nodes use the slider's base strength so clusters can still spread.
+		const centerStrength = (n: FGNode) =>
+			n.degree === 0 ? f.centerStrength * 6 : f.centerStrength;
+		fg.d3Force("x", d3.forceX(0).strength(centerStrength));
+		fg.d3Force("y", d3.forceY(0).strength(centerStrength));
 		// Generous collide padding so node labels (rendered below each node)
 		// have room to breathe and don't overlap with neighbors.
 		fg.d3Force(
@@ -348,11 +406,15 @@ export class GraphCanvas extends Component<Props, State> {
 				.strength(0.85),
 		);
 		(fg.d3Force("charge") as d3.ForceManyBody<any> | null)?.strength(
-			CHARGE_STRENGTH,
+			f.chargeStrength,
 		);
-		const linkForce = fg.d3Force("link") as d3.ForceLink<any, any> | null;
-		linkForce?.strength(LINK_STRENGTH);
-		linkForce?.distance(LINK_DISTANCE);
+		// Force-graph maintains the link force itself: its `update()` runs
+		// after each graphData change and rebinds the link set from the
+		// merged links we pass in. We only override the per-link strength
+		// accessor (Obsidian-style cluster pull: pairs joined by multiple
+		// relations get a proportionally stronger spring) and the rest
+		// length, plus the radial center pull above.
+		this.configureLinkForce();
 
 		const resize = () => {
 			if (!this.containerRef) return;
@@ -394,6 +456,10 @@ export class GraphCanvas extends Component<Props, State> {
 			// Selected-node ring change: force a repaint.
 			const fg = this.fg;
 			if (fg) fg.nodeCanvasObject(fg.nodeCanvasObject());
+		}
+
+		if (prevProps.forces !== this.props.forces) {
+			this.applyForces();
 		}
 	}
 
@@ -464,13 +530,30 @@ export class GraphCanvas extends Component<Props, State> {
 		}
 
 		fg.graphData({ nodes, links });
+		// Re-apply our link-force tuning. force-graph's update() runs after
+		// graphData and rebinds the link set from the merged links, but
+		// doesn't touch strength/distance accessors. Re-set them now so the
+		// per-link multiplicity factor still applies after the rebind.
+		this.configureLinkForce();
 		this.hoveredId = null;
 		this.neighbors = new Set();
 
 		if (!this.fedOnce) {
 			// First feed — let the simulation run and auto-fit the camera.
 			this.fedOnce = true;
-			setTimeout(() => this.fg?.zoomToFit(400, 40), 50);
+			setTimeout(() => {
+				const fg2 = this.fg;
+				if (!fg2) return;
+				if (nodes.length <= 1) {
+					// zoomToFit on a single node scales until its 6-radius circle
+					// fills the canvas. Just center and pick a sane zoom.
+					fg2.centerAt(0, 0, 0);
+					fg2.zoom(2, 0);
+					return;
+				}
+				fg2.zoomToFit(400, 40);
+				if (fg2.zoom() > MAX_AUTO_ZOOM) fg2.zoom(MAX_AUTO_ZOOM, 400);
+			}, 50);
 		} else {
 			// Subsequent feeds — short, soft re-heat so existing nodes don't bounce.
 			fg.cooldownTicks(60);
@@ -750,11 +833,19 @@ export class GraphCanvas extends Component<Props, State> {
 	}
 
 	private recenter() {
-		this.fg?.zoomToFit(400, 40);
+		const fg = this.fg;
+		if (!fg) return;
+		if (this.computed.nodes.length <= 1) {
+			fg.centerAt(0, 0, 400);
+			fg.zoom(2, 400);
+			return;
+		}
+		fg.zoomToFit(400, 40);
+		if (fg.zoom() > MAX_AUTO_ZOOM) fg.zoom(MAX_AUTO_ZOOM, 400);
 	}
 
 	render() {
-		const { edgeHover } = this.state;
+		const { edgeHover, ghostHover } = this.state;
 		const isEmpty = this.computed.nodes.length === 0;
 		return (
 			<div class="gv-canvas-wrap">
@@ -766,6 +857,7 @@ export class GraphCanvas extends Component<Props, State> {
 				/>
 				{isEmpty && <div class="gv-empty">Graph is empty</div>}
 				{edgeHover && <EdgeTooltip {...edgeHover} />}
+				{ghostHover && !edgeHover && <GhostTooltip {...ghostHover} />}
 				<div class="graph-controls">
 					<div class="graph-pan">
 						<button
@@ -821,6 +913,25 @@ export class GraphCanvas extends Component<Props, State> {
 			</div>
 		);
 	}
+}
+
+function GhostTooltip({
+	title,
+	x,
+	y,
+}: {
+	title: string;
+	x: number;
+	y: number;
+}) {
+	return (
+		<div
+			class="gv-ghost-tooltip"
+			style={{ left: `${x + 14}px`, top: `${y + 14}px` }}
+		>
+			Click to add <strong>{title}</strong> to the graph
+		</div>
+	);
 }
 
 function EdgeTooltip({

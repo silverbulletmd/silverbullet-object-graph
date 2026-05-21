@@ -10,6 +10,7 @@ import type {
 	Edge,
 	ExpansionResult,
 	Filters,
+	ForceSettings,
 	ObjectNode,
 	RootViewModel,
 } from "../../src/model.ts";
@@ -18,6 +19,7 @@ import { Header } from "./header.tsx";
 import { Sidebar } from "./sidebar.tsx";
 
 const FILTERS_KEY = ["plug", "object-graph", "filters"];
+const FORCES_KEY = ["plug", "object-graph", "forces"];
 
 type NodeState = { node: ObjectNode; status: "expanded" | "ghost" };
 
@@ -47,6 +49,7 @@ export function App({ vm }: { vm: RootViewModel }) {
 	);
 	const [filters, setFilters] = useState<Filters>(vm.filters);
 	const [sidebarWidth, setSidebarWidth] = useState<number>(230);
+	const [forces, setForces] = useState<ForceSettings>(vm.forces);
 	const [cache] = useState<Map<string, ExpansionResult>>(() => {
 		const m = new Map<string, ExpansionResult>();
 		m.set(vm.root.object.ref, vm.root);
@@ -67,6 +70,16 @@ export function App({ vm }: { vm: RootViewModel }) {
 		}
 		void datastore.set(FILTERS_KEY, filters);
 	}, [filters, persistFilters]);
+
+	// Forces persist regardless of view (global and explore share them).
+	const didMountForcesRef = useRef(false);
+	useEffect(() => {
+		if (!didMountForcesRef.current) {
+			didMountForcesRef.current = true;
+			return;
+		}
+		void datastore.set(FORCES_KEY, forces);
+	}, [forces]);
 
 	const fetchExpansion = useCallback(
 		async (ref: string): Promise<ExpansionResult> => {
@@ -158,24 +171,55 @@ export function App({ vm }: { vm: RootViewModel }) {
 	// set without forcing the callback identity to churn on every filter tweak.
 	const visibleNodesRef = useRef<NodeState[]>([]);
 
+	// Transitive expansion: follow every relation outward, round by round,
+	// until no new ghosts remain along allowed labels. Hidden-label edges
+	// are recorded (so toggling them on later reveals them) but they
+	// don't seed further exploration. Safety-capped at 5000 nodes.
 	const expandAllVisibleGhosts = useCallback(async () => {
-		const ghostRefs = visibleNodesRef.current
-			.filter((ns) => ns.status === "ghost")
-			.map((ns) => ns.node.ref);
-		if (ghostRefs.length === 0) return;
-		// Fetch in parallel; apply as one batched update.
-		const results = await Promise.all(ghostRefs.map(fetchExpansion));
-		applyExpansions(results);
-	}, [fetchExpansion, applyExpansions]);
+		const SAFETY_CAP = 5000;
+		const hiddenLabels = new Set(filters.hiddenLabels);
+		const expanded = new Set<string>();
+		const pending = new Set<string>();
+		for (const ns of visibleNodesRef.current) {
+			if (ns.status === "expanded") expanded.add(ns.node.ref);
+			else pending.add(ns.node.ref);
+		}
+		while (pending.size > 0) {
+			if (expanded.size + pending.size > SAFETY_CAP) break;
+			const refs = [...pending];
+			pending.clear();
+			const results = await Promise.all(refs.map(fetchExpansion));
+			applyExpansions(results);
+			for (const r of results) {
+				expanded.add(r.object.ref);
+				// Only follow edges whose label is currently visible.
+				for (const e of r.edges) {
+					if (hiddenLabels.has(e.label)) continue;
+					for (const ref of [e.source, e.target]) {
+						if (!expanded.has(ref) && !pending.has(ref)) pending.add(ref);
+					}
+				}
+			}
+		}
+	}, [fetchExpansion, applyExpansions, filters.hiddenLabels]);
 
 	/**
 	 * Reset the explored set to "currently-selected object + its 1-hop
 	 * ghosts". The selection stays put; only the broader exploration is
 	 * collapsed back to that node's immediate neighborhood.
+	 *
+	 * Always issues a fresh worker call (skipping the cache) because the
+	 * cache may hold a wide expansion for this ref — notably, in the
+	 * Global Page Map view the cache entry for the anchor IS the global
+	 * graph, and returning that here would defeat the whole point of Focus.
 	 */
 	const collapseAll = useCallback(async () => {
 		const anchor = selectedRef ?? vm.root.object.ref;
-		const result = await fetchExpansion(anchor);
+		const result = (await system.invokeFunction(
+			"object-graph.expandObject",
+			anchor,
+		)) as ExpansionResult;
+		cache.set(anchor, result);
 		const m = new Map<string, NodeState>();
 		m.set(result.object.ref, { node: result.object, status: "expanded" });
 		for (const n of result.neighbors) {
@@ -187,7 +231,7 @@ export function App({ vm }: { vm: RootViewModel }) {
 		keys.clear();
 		for (const e of result.edges) keys.add(edgeKey(e));
 		setSelectedRef(result.object.ref);
-	}, [selectedRef, fetchExpansion, vm.root.object.ref]);
+	}, [selectedRef, cache, vm.root.object.ref]);
 
 	// Keyboard: Backspace / Delete removes selected, unless focused in an input.
 	useEffect(() => {
@@ -242,13 +286,16 @@ export function App({ vm }: { vm: RootViewModel }) {
 		}
 
 		const out: NodeState[] = [];
+		const hideOrphans = filters.hideOrphans;
 		for (const ns of nodes.values()) {
 			if (!candidate.has(ns.node.ref)) continue;
-			// Root and expanded nodes stay even without a visible connection;
-			// ghosts need at least one to avoid floating-orphan visuals.
+			// With "Hide orphans" on (the default), nodes with no visible
+			// incoming or outgoing relation are hidden — except the root,
+			// which is the user's anchor. With it off, every candidate
+			// stays visible regardless of connectivity.
 			if (
+				!hideOrphans ||
 				ns.node.ref === rootRef ||
-				ns.status === "expanded" ||
 				(degree.get(ns.node.ref) ?? 0) > 0
 			) {
 				out.push(ns);
@@ -286,7 +333,6 @@ export function App({ vm }: { vm: RootViewModel }) {
 	return (
 		<div class="gv-app">
 			<Header
-				title={vm.root.object.title}
 				ghostCount={ghostCount}
 				onExpandAll={expandAllVisibleGhosts}
 				onCollapseAll={collapseAll}
@@ -294,6 +340,8 @@ export function App({ vm }: { vm: RootViewModel }) {
 				onToggleHideEdgeLabels={(v) =>
 					setFilters({ ...filters, hideEdgeLabels: v })
 				}
+				hideOrphans={filters.hideOrphans}
+				onToggleHideOrphans={(v) => setFilters({ ...filters, hideOrphans: v })}
 			/>
 			<div
 				class="gv-body"
@@ -307,6 +355,8 @@ export function App({ vm }: { vm: RootViewModel }) {
 					universe={vm.universe}
 					filters={filters}
 					onFiltersChange={setFilters}
+					forces={forces}
+					onForcesChange={setForces}
 					selected={selected}
 				/>
 				<SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
@@ -316,6 +366,7 @@ export function App({ vm }: { vm: RootViewModel }) {
 					selectedRef={selectedRef}
 					onNodeClick={onNodeClick}
 					hideEdgeLabels={filters.hideEdgeLabels}
+					forces={forces}
 				/>
 			</div>
 		</div>

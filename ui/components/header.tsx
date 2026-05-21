@@ -1,25 +1,27 @@
 import { editor } from "@silverbulletmd/silverbullet/syscalls";
 
 type Props = {
-	title: string;
 	ghostCount: number;
 	onExpandAll: () => void;
 	onCollapseAll: () => void;
 	hideEdgeLabels: boolean;
 	onToggleHideEdgeLabels: (v: boolean) => void;
+	hideOrphans: boolean;
+	onToggleHideOrphans: (v: boolean) => void;
 };
 
 export function Header({
-	title,
 	ghostCount,
 	onExpandAll,
 	onCollapseAll,
 	hideEdgeLabels,
 	onToggleHideEdgeLabels,
+	hideOrphans,
+	onToggleHideOrphans,
 }: Props) {
 	return (
 		<header class="gv-header">
-			<h1 class="gv-header-title">{title}</h1>
+			<h1 class="gv-header-title">Object Graph</h1>
 			<div class="gv-header-actions">
 				<label
 					class="gv-header-toggle"
@@ -34,13 +36,26 @@ export function Header({
 					/>
 					Hide labels
 				</label>
+				<label
+					class="gv-header-toggle"
+					title="Hide nodes with no visible incoming or outgoing relation"
+				>
+					<input
+						type="checkbox"
+						checked={hideOrphans}
+						onChange={(e) =>
+							onToggleHideOrphans((e.target as HTMLInputElement).checked)
+						}
+					/>
+					Hide orphans
+				</label>
 				<button
 					class="gv-header-button"
-					title="Expand every visible ghost node"
+					title="Follow every enabled relation outward until no ghosts remain"
 					disabled={ghostCount === 0}
 					onClick={onExpandAll}
 				>
-					Expand{ghostCount > 0 ? ` (${ghostCount})` : ""}
+					Expand all
 				</button>
 				<button
 					class="gv-header-button"

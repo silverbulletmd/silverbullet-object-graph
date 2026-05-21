@@ -1,11 +1,13 @@
 import { syscall } from "@silverbulletmd/silverbullet/syscall";
 import { editor } from "@silverbulletmd/silverbullet/syscalls";
 import { useEffect, useMemo, useState } from "preact/hooks";
-import type {
-	Edge,
-	Filters,
-	GraphUniverse,
-	ObjectNode,
+import {
+	defaultForceSettings,
+	type Edge,
+	type Filters,
+	type ForceSettings,
+	type GraphUniverse,
+	type ObjectNode,
 } from "../../src/model.ts";
 import { colorForTag } from "../colors.ts";
 
@@ -20,6 +22,8 @@ type Props = {
 	universe: GraphUniverse;
 	filters: Filters;
 	onFiltersChange: (f: Filters) => void;
+	forces: ForceSettings;
+	onForcesChange: (f: ForceSettings) => void;
 	// Selected node; rendered as an object-detail section below the filters.
 	selected: ObjectNode | null;
 };
@@ -34,8 +38,93 @@ export function Sidebar(props: Props) {
 		<aside class="gv-sidebar">
 			<TagsSection {...props} />
 			<LabelsSection {...props} />
+			<ForcesSection
+				forces={props.forces}
+				onForcesChange={props.onForcesChange}
+			/>
 			<ObjectSection selected={props.selected} />
 		</aside>
+	);
+}
+
+function ForcesSection({
+	forces,
+	onForcesChange,
+}: {
+	forces: ForceSettings;
+	onForcesChange: (f: ForceSettings) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const update = (patch: Partial<ForceSettings>) =>
+		onForcesChange({ ...forces, ...patch });
+	const sliders: {
+		label: string;
+		key: keyof ForceSettings;
+		min: number;
+		max: number;
+		step: number;
+	}[] = [
+		{
+			label: "Center pull",
+			key: "centerStrength",
+			min: 0,
+			max: 0.3,
+			step: 0.005,
+		},
+		{
+			label: "Repulsion",
+			key: "chargeStrength",
+			min: -800,
+			max: 0,
+			step: 10,
+		},
+		{ label: "Link distance", key: "linkDistance", min: 10, max: 600, step: 1 },
+		{
+			label: "Link strength",
+			key: "linkStrength",
+			min: 0.01,
+			max: 1,
+			step: 0.01,
+		},
+	];
+	return (
+		<div class="gv-section">
+			<header class="gv-section-header" onClick={() => setOpen(!open)}>
+				<span class="gv-section-title">
+					<span class={`gv-twisty ${open ? "open" : "closed"}`}>▸</span>
+					Forces
+				</span>
+				<span class="gv-section-actions" onClick={(e) => e.stopPropagation()}>
+					<a onClick={() => onForcesChange(defaultForceSettings)}>reset</a>
+				</span>
+			</header>
+			{open && (
+				<div class="gv-section-body gv-forces-body">
+					{sliders.map((s) => (
+						<label class="gv-force-row" key={s.key}>
+							<div class="gv-force-label">
+								<span>{s.label}</span>
+								<span class="gv-force-value">
+									{forces[s.key].toFixed(s.step < 0.1 ? 3 : 0)}
+								</span>
+							</div>
+							<input
+								type="range"
+								min={s.min}
+								max={s.max}
+								step={s.step}
+								value={forces[s.key]}
+								onInput={(e) =>
+									update({
+										[s.key]: Number((e.target as HTMLInputElement).value),
+									})
+								}
+							/>
+						</label>
+					))}
+				</div>
+			)}
+		</div>
 	);
 }
 

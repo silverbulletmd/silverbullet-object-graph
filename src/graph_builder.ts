@@ -345,29 +345,23 @@ export async function buildGlobalGraph(
 		nodeByRef.set(ref, projectIndexed(ref, "page", p));
 	}
 
-	// Drop edges that touch meta pages — they'd otherwise re-appear as
-	// dangling stubs even though we excluded them from the page list.
+	// Drop edges that touch meta pages, and constrain the global view to
+	// page-to-page edges only: URL / file / item / block endpoints are
+	// out of scope here. They'd otherwise drag in non-page nodes (random
+	// URLs and so on) that the Global Page Map promises not to show.
 	const edges = collapseEdges(rows)
 		.map((e) => ({
 			...e,
 			source: stripPagePos(e.source),
 			target: stripPagePos(e.target),
 		}))
-		.filter((e) => !metaRefs.has(e.source) && !metaRefs.has(e.target));
-
-	// Resolve any remaining unknown refs (truly dangling pages, URL/file targets).
-	for (const e of edges) {
-		for (const ref of [e.source, e.target]) {
-			if (nodeByRef.has(ref)) continue;
-			const kind = classifyKind(ref);
-			nodeByRef.set(
-				ref,
-				kind === "url" || kind === "file"
-					? stubNode(ref, kind, false)
-					: stubNode(ref, "page", true),
-			);
-		}
-	}
+		.filter(
+			(e) =>
+				!metaRefs.has(e.source) &&
+				!metaRefs.has(e.target) &&
+				nodeByRef.has(e.source) &&
+				nodeByRef.has(e.target),
+		);
 
 	// Choose the root: prefer the caller-supplied ref when available;
 	// otherwise pick an arbitrary page (first by name).

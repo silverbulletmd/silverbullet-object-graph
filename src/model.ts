@@ -65,12 +65,31 @@ export type Filters = {
 	hiddenLabels: string[];
 	// When true, edge labels on the canvas are suppressed entirely.
 	hideEdgeLabels: boolean;
+	// When true, nodes with no visible incoming or outgoing relation in
+	// the current filter set are hidden (except the root).
+	hideOrphans: boolean;
+};
+
+// Tunable force-simulation knobs exposed as sliders in the sidebar.
+export type ForceSettings = {
+	centerStrength: number;
+	chargeStrength: number;
+	linkDistance: number;
+	linkStrength: number;
+};
+
+export const defaultForceSettings: ForceSettings = {
+	centerStrength: 0.18,
+	chargeStrength: -430,
+	linkDistance: 223,
+	linkStrength: 0.1,
 };
 
 export const defaultFilters: Filters = {
 	hiddenTags: [],
-	hiddenLabels: ["co-mention"],
+	hiddenLabels: ["co-mention", "url"],
 	hideEdgeLabels: false,
+	hideOrphans: true,
 };
 
 /**
@@ -88,6 +107,7 @@ export type RootViewModel = {
 	root: ExpansionResult;
 	universe: GraphUniverse;
 	filters: Filters;
+	forces: ForceSettings;
 	/**
 	 * When true, the panel marks all of `root.neighbors` as already-expanded
 	 * (instead of the default ghost state). Used by the global view, which

@@ -347,6 +347,23 @@ html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
   color: var(--cfg-color);
 }
 
+/* Ghost-node hover tooltip */
+.gv-ghost-tooltip {
+  position: absolute;
+  z-index: 20;
+  max-width: 280px;
+  background: var(--cfg-bg);
+  border: 1px solid var(--cfg-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  padding: 5px 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  color: var(--cfg-color);
+  pointer-events: none;
+  line-height: 1.35;
+}
+
 /* Edge hover tooltip */
 .gv-edge-tooltip {
   position: absolute;
@@ -425,6 +442,11 @@ html, body { height: 100%; background: var(--cfg-bg); color: var(--cfg-color); }
 }
 .gv-section-actions a:hover { color: var(--cfg-color); text-decoration: underline; }
 .gv-section-body { padding: 0; }
+.gv-forces-body { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.gv-force-row { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.gv-force-row input[type="range"] { width: 100%; }
+.gv-force-label { display: flex; justify-content: space-between; color: var(--cfg-color-muted); }
+.gv-force-value { font-variant-numeric: tabular-nums; }
 .gv-section-search {
   width: 100%;
   border: 1px solid var(--cfg-input-border);
