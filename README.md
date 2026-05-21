@@ -24,7 +24,7 @@ See [[ObjectGraph]] for the in-product documentation.
 Run the `Library: Install` command with:
 
 ```
-ghr:zefhemel/silverbullet-object-graph@edge/ObjectGraph
+ghr:zefhemel/silverbullet-object-graph@edge/ObjectGraph.md
 ```
 
 ## Requirements
