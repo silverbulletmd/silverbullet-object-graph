@@ -50,5 +50,4 @@ jobs:
             --prerelease \
             --title "Edge build (rolling)" \
             --notes "Built from \`${{ github.sha }}\` on $(date -u +%Y-%m-%dT%H:%M:%SZ). This release is replaced on every push to main." \
-            object-graph.plug.js \
-            ObjectGraph.md
+            *.js *.md
