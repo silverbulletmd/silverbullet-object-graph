@@ -206,9 +206,15 @@ export class GraphCanvas extends Component<Props, State> {
 	private clickTimer: number | null = null;
 	private edgeClickTimer: number | null = null;
 
-	// Whether we've fed data once already, so we can auto-fit only on
-	// initial open and avoid camera jumps on later expansions.
+	// Whether we've fed data once already. The first feed auto-fits via a
+	// timeout; later feeds (expansions/collapses) arm `pendingFit` and re-fit
+	// once the simulation settles (see onEngineStop).
 	private fedOnce = false;
+
+	// Set when a data-driven feed wants the camera re-fitted after the
+	// simulation next settles. Gated so node drags (which also re-heat and
+	// fire onEngineStop) don't trigger camera jumps.
+	private pendingFit = false;
 
 	// Cached computation of nodes/links/adjacency/radii; recomputed in
 	// componentDidUpdate when props.nodes or props.edges identity changes.
@@ -387,6 +393,15 @@ export class GraphCanvas extends Component<Props, State> {
 			.onNodeDragEnd((node: FGNode) => {
 				node.fx = node.x;
 				node.fy = node.y;
+			})
+			.onEngineStop(() => {
+				// After a data-driven feed re-heats the simulation and it settles,
+				// re-fit the camera so newly added/removed nodes stay in view.
+				// Gated by pendingFit so drag-induced settles don't move the camera.
+				if (this.pendingFit) {
+					this.pendingFit = false;
+					this.recenter();
+				}
 			});
 
 		const f = this.props.forces;
@@ -490,7 +505,8 @@ export class GraphCanvas extends Component<Props, State> {
 	}
 
 	// Feed nodes/links into force-graph, preserving positions and softly
-	// re-heating the simulation. Auto-fits the camera only on the first feed.
+	// re-heating the simulation. The first feed auto-fits the camera after a
+	// short delay; later feeds re-fit once the simulation settles.
 	private feedData() {
 		const fg = this.fg;
 		if (!fg) return;
@@ -555,7 +571,9 @@ export class GraphCanvas extends Component<Props, State> {
 				if (fg2.zoom() > MAX_AUTO_ZOOM) fg2.zoom(MAX_AUTO_ZOOM, 400);
 			}, 50);
 		} else {
-			// Subsequent feeds — short, soft re-heat so existing nodes don't bounce.
+			// Subsequent feeds — short, soft re-heat so existing nodes don't bounce,
+			// then re-fit the camera once it settles (handled in onEngineStop).
+			this.pendingFit = true;
 			fg.cooldownTicks(60);
 		}
 	}
