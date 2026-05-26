@@ -1,6 +1,6 @@
 # SilverBullet Object Graph
 
-An interactive object-graph explorer for [SilverBullet](https://silverbullet.md). Visualizes the objects in your space — pages, items, blocks, and the typed relations between them — so you can navigate by structure rather than by name.
+An interactive object-graph explorer for [SilverBullet](https://silverbullet.md). Visualizes the objects in your space — pages, items, blocks, and the typed relations between them — so you _can_ navigate by structure rather than by name.
 
 ## Features
 
@@ -24,7 +24,7 @@ See [[ObjectGraph]] for the in-product documentation.
 Run the `Library: Install` command with:
 
 ```
-ghr:zefhemel/silverbullet-object-graph@edge/ObjectGraph.md
+ghr:silverbulletmd/silverbullet-object-graph@edge/ObjectGraph.md
 ```
 
 ## Requirements

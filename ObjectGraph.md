@@ -1,5 +1,5 @@
 ---
-name: Library/zefhemel/silverbullet-object-graph/ObjectGraph
+name: Library/silverbulletmd/silverbullet-object-graph/ObjectGraph
 tags: meta/library
 files:
 - object-graph.plug.js

@@ -62,6 +62,6 @@ Scripts:
 ```sh
 npm run build         # produce object-graph.plug.js in the repo root
 npm run build:deploy  # build, then copy object-graph.plug.js + ObjectGraph.md
-                      #   → demo-space/Library/zefhemel/silverbullet-object-graph/
+                      #   → demo-space/Library/silverbulletmd/silverbullet-object-graph/
 ```
 Re-run `build:deploy` after each change and reload the plug in the running SilverBullet. Reload the page to pick up the new version.
