@@ -1,5 +1,8 @@
 # SilverBullet Object Graph
 
+**This plug is now integrated into SilverBullet main line, therefore this repo is archived**
+
+
 An interactive object-graph explorer for [SilverBullet](https://silverbullet.md). Visualizes the objects in your space — pages, items, blocks, and the typed relations between them — so you _can_ navigate by structure rather than by name.
 
 ## Features
